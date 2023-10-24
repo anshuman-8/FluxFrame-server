@@ -1,5 +1,6 @@
 import os
 import torch
+import re
 import transformers
 import logging as log
 # from dotenv import load_dotenv
@@ -7,19 +8,22 @@ import logging as log
 # load_dotenv()
 
 MAX_INPUT_TOKEN_LENGTH = 4000
-MAX_TOKEN = 2048
+MAX_TOKEN = 3584
 log.basicConfig(level=log.INFO, format=" %(levelname)s %(message)s")
+history = []
 
 SYSTEM_PROMPT = """
-You are a helpful code writer with a deep knowledge of HTML, CSS, Web-development and software design. Follow all the instructions provided, but can also give more features.\nDo not give multiple answers or repeat things. Make beautiful designs using CSS based on your creativity.\nPlease don't provide wrong code. \n Give a complete solution with maximum number of feature. Code practice: Give all the CSS inside <style> tag mapped with class names and id. Do not link any files to head link tag. You may also write necessary correct javascript by creating functions inside <script> tag, use buttons calling function and don't use form. Always check if all the components are correctly written and mapped.\
+You are a helpful experienced web developer and designer with a deep knowledge of HTML, CSS, Web-development and software UI design. Follow all the instructions provided, but can also give more features.\nDo not give multiple answers or repeat things. Make beautiful designs using CSS based on your creativity.\nPlease don't provide wrong code. \n Give a complete solution with maximum number of features. Code practice: Give all the CSS inside <style> tag mapped with class names and id. Do not link any files to head link tag. You may also write necessary correct javascript by creating functions inside <script> tag, use buttons calling function and don't use form tag. Always check if all the components are correctly written and mapped.\
 """
 
-PROMPT = "Design a website that takes two input from user and display the sum of two numbers in a box."
+PROMPT = "A personal portfolio with a navbar with big text of 'About' and 'Blog' in center The page should be divided into 2 parts vertically, left side should have a profile pic and right side should have a short description about the person. The page should have a footer with social media icons."
 
-def get_prompt(message: str,system_prompt: str) -> str:
-    texts = [f'<s>[INST] <<SYS>>\n{system_prompt}\n<</SYS>>\n\n{message}:\n\n<!DOCTYPE html> <html><FILL_ME></html>[/INST]']
+def get_prompt(message: str,system_prompt: str, history_code: str = "<></>", infilling=False) -> str:
+    texts = [f'<s><<SYS>>\n{system_prompt}\n<</SYS>>\n\n[INST]{message}\n[/INST]\n<!DOCTYPE html> <html><FILL_ME></html></s>']
+
     
     log.info(f'Prompt: {texts}')
+    history = texts
     return ''.join(texts)
 
 
@@ -27,6 +31,16 @@ def write_to_html(filename, content):
     with open(filename, 'w') as file:
         file.write(content)
         file.close()
+
+def get_html_block(filling):
+    html_pattern = r'<html>(.*?)</html>'
+    matches = re.findall(html_pattern, filling, re.DOTALL)
+    
+    if matches:
+        return matches[0]
+    else:
+        return filling
+
 
 def generate(prompt, model, device):
     tokenizer = transformers.CodeLlamaTokenizer.from_pretrained(
@@ -37,7 +51,8 @@ def generate(prompt, model, device):
     generated_ids = model.generate(input_ids.to(device), max_new_tokens=MAX_TOKEN)
     filling = tokenizer.batch_decode(generated_ids[:, input_ids.shape[1] :], skip_special_tokens=True)[0]
     # gen_code = prompt.replace(" <FILL_ME>", filling)
-    gen_code = f'<!DOCTYPE html>\n<html>\n{filling}</html>'
+    print(filling)
+    gen_code = f'<!DOCTYPE html>\n<html>\n{get_html_block(filling)}</html>'
     write_to_html('./testing/index.html', gen_code)
     return gen_code
 

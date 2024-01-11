@@ -1,104 +1,135 @@
-import os
-from dotenv import dotenv_values
-
-config = dotenv_values(".env")
-os.environ["TRANSFORMERS_CACHE"] = config["TRANSFORMERS_CACHE_DIR"]
-
-import torch
-import transformers
-import logging as log
+import openai
+import logging
 import re
 
-MAX_INPUT_TOKEN_LENGTH = 4000
-MAX_TOKEN = 3840
-log.basicConfig(level=log.INFO, format=" %(levelname)s %(message)s")
+model = "gpt-3.5-turbo"
+sys_init_message = {
+    "role": "system",
+    "content": "You are a helpful experienced web developer and designer "
+    "with a deep knowledge of React, TailwindCSS, JavaScript, Web-development "
+    "and Software UI design. Follow all the instructions provided, but can also "
+    "give more features. Do not give multiple answers or repeat things. Make "
+    "beautiful designs using TailwindCSS based on your creativity. Don't provide "
+    "wrong code. Give a complete solution with maximum number of features. "
+    "Give only the JSX code, Do not give any explanation, comments or enclose it "
+    "in code blocks. "
+    "Code practice: Give only the JSX code, using tailwindCSS in its className. "
+    "Do not give globals.css CSS code,just give tailwindCSS class in className. "
+    "You may also write necessary correct javascript by creating functions inside "
+    "<script> tag, use buttons calling function and don't use form tag. Always "
+    "check if all the components are correctly written and mapped.",
+}
+
+sys_followup_message = {
+    "role": "system",
+    "content": "You are a helpful experienced web developer and designer "
+    "with a deep knowledge of React, TailwindCSS, JavaScript, Web-development "
+    "and Software UI design. You will be given the code for a React file that "
+    "contains a component. You will also be given a prompt that describes a "
+    "modification that a certain part of the component needs. You might also be "
+    "given the code of the part of the component that needs to be modified. "
+    "If the code for the part to be modified is not given, you will have to "
+    "infer the part to be modified from the provided prompt or add the code for "
+    "the part to be modified. You will have to modify the component to satisfy "
+    "the prompt. Return the full code of the modified component and follow the "
+    "below code practice. "
+    "Code practice: Give only the JSX code, using tailwindCSS in its className. "
+    "Do not give globals.css CSS code,just give tailwindCSS class in className. "
+    "You may also write necessary correct javascript by creating functions inside "
+    "<script> tag, use buttons calling function and don't use form tag. Always "
+    "check if all the components are correctly written and mapped.",
+}
+
 history = []
 
-SYSTEM_PROMPT = """
-You are a helpful experienced web developer and designer with a deep knowledge of React, TailwindCSS, JavaScript, Web-development and Software UI design. Follow all the instructions provided, but can also give more features.\nDo not give multiple answers or repeat things. Make beautiful designs using TailwindCSS based on your creativity.\nPlease don't provide wrong code. \n Give a complete solution with maximum number of features. 
-Code practice: Give only the JSX code, using tailwindCSS in its className. Do not give globals.css CSS code,just give tailwindCSS class in className. You may also write necessary correct javascript by creating functions inside <script> tag, use buttons calling function and don't use form tag. Always check if all the components are correctly written and mapped.\
-"""
+
+def init_gpt_api(key: str):
+    openai.api_key = key
+    logging.info("GPT-3 API initialized")
 
 
-def init_model():
-    bnb_config = transformers.BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch.bfloat16,
+def generate(prompt, prev_prompt= None, element= None):
+    code = get_code_generation(prompt, prev_prompt, element)
+    code = get_html_block(code)
+    code = prepare_react_code(code)
+
+    return code
+
+
+def get_code_generation(message: str, prev_prompt= None, element= None) -> str:
+    if prev_prompt is None:
+        messages = [sys_init_message] + [{"role": "user", "content": message}]
+    else:
+        user_followup_messages = [
+            {"role": "user", "content": message},
+            {"role": "user", "content": f"Code:\n{prev_prompt.generation}"},
+        ]
+        if element is not None:
+            user_followup_messages.append(
+                {"role": "user", "content": f"Element to modify:\n{element}"}
+            )
+        messages = [sys_followup_message] + user_followup_messages
+    # messages = [sys_init_message] + [{"role": "user", "content": message}]
+
+    logging.info(f"Sending API request: {messages}")
+    completion = openai.ChatCompletion.create(
+        model=model,
+        messages=messages,
     )
+    logging.info(f"Received API response: {completion}")
+    content = completion.choices[0].message.content
 
-    model = transformers.AutoModelForCausalLM.from_pretrained(
-        "codellama/CodeLlama-13b-Instruct-hf",
-        # "/home/anshuman/.cache/huggingface/hub/models--codellama--CodeLlama-13b-Instruct-hf",
-        trust_remote_code=True,
-        quantization_config=bnb_config,
-        device_map="auto",
-        # load_in_8bit_fp32_cpu_offload=True
-    ).eval()
+    content = replace_escape_characters(content)
+    with open("content.js", "w") as f:
+        f.write(content)
+    return content
 
-    tokenizer = transformers.CodeLlamaTokenizer.from_pretrained(
-        "codellama/CodeLlama-13b-Instruct-hf"
-        # "/home/anshuman/.cache/huggingface/hub/models--codellama--CodeLlama-13b-Instruct-hf"
-    )
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+def replace_escape_characters(code):
+    code = code.replace("\\n", "\n")
+    code = code.replace("\\t", "\t")
+    code = code.replace('\\"', '"')
+    code = code.replace("\\'", "'")
+    return code
 
-    return model, tokenizer, device
-
-def generate(prompt, model, tokenizer, device):
-
-    processed_prompt = get_prompt(prompt,SYSTEM_PROMPT)
-    input_ids = tokenizer(processed_prompt, return_tensors="pt", device=device)["input_ids"]
-    generated_ids = model.generate(input_ids.to(device), max_new_tokens=MAX_TOKEN)
-    filling = tokenizer.batch_decode(generated_ids[:, input_ids.shape[1] :], skip_special_tokens=True)[0]
-
-    log.info(f'Filling: {filling}')
-    # gen_code = f'{prepare_react_code(filling)}'
-    gen_code = filling
-    return gen_code
-
-def get_prompt(message: str,system_prompt: str, history_code: str = "<></>", infilling=False) -> str:
-    # texts = [f'<s><<SYS>>\n{system_prompt}\n<</SYS>>\n\n[INST]{message}\n[/INST]\n<!DOCTYPE html> <html><FILL_ME></html></s>']
-    texts =  f"<<SYS>>\n{system_prompt}\n<</SYS>>\n[INST]{message}\n[/INST]\n" 
-    texts+="import React from 'react';\nimport '../styles/globals.css';\n\nfunction Component(){\n<FILL_ME> \n}\nexport default Component;"
-    
-    log.info(f'Prompt: {texts}')
-    history = texts
-    return ''.join(texts)
 
 def get_html_block(filling):
-    html_pattern = r'<html>(.*?)</html>'
+    html_pattern = r"<html>(.*?)</html>"
     matches = re.findall(html_pattern, filling, re.DOTALL)
-    
+
     if matches:
         return matches[0]
     else:
         return filling
 
+
 def prepare_react_code(filling):
-    start_marker = 'function Component(){'
-    end_marker = 'export default Component;'
-    
+    start_marker = "function Component(){"
+    end_marker = "export default Component;"
+
     start_index = filling.find(start_marker)
     end_index = filling.find(end_marker, start_index)
 
     print(start_index, end_index)
 
     if start_index != -1 and end_index != -1 and end_index > start_index:
-        content = filling[start_index + len(start_marker):end_index].strip()
-        filling =  content
+        content = filling[start_index + len(start_marker) : end_index].strip()
+        filling = content
     else:
-        filling = 'return() '
-        
-    code = '''
+        filling = "return() "
+
+    code = (
+        """
         import React from "react";
         import '../styles/globals.css'
              
           function Component(){
           
-          '''+filling+'''
+          """
+        + filling
+        + """
           
           export default Component;
-        '''
+        """
+    )
     return code

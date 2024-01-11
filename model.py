@@ -1,4 +1,4 @@
-import openai
+from openai import AsyncOpenAI, OpenAI
 import logging
 import re
 
@@ -44,19 +44,20 @@ history = []
 
 
 def init_gpt_api(key: str):
-    openai.api_key = key
+    client = OpenAI(api_key=key)
+    return client
     logging.info("GPT-3 API initialized")
 
 
-def generate(prompt, prev_prompt= None, element= None):
-    code = get_code_generation(prompt, prev_prompt, element)
+def generate(prompt, prev_prompt= None, element= None, openai_client=None):
+    code = get_code_generation(prompt, prev_prompt, element, openai_client)
     code = get_html_block(code)
     code = prepare_react_code(code)
 
     return code
 
 
-def get_code_generation(message: str, prev_prompt= None, element= None) -> str:
+def get_code_generation(message: str, prev_prompt= None, element= None, openai_client=None) -> str:
     if prev_prompt is None:
         messages = [sys_init_message] + [{"role": "user", "content": message}]
     else:
@@ -72,7 +73,7 @@ def get_code_generation(message: str, prev_prompt= None, element= None) -> str:
     # messages = [sys_init_message] + [{"role": "user", "content": message}]
 
     logging.info(f"Sending API request: {messages}")
-    completion = openai.ChatCompletion.create(
+    completion = openai_client.chat.completions.create(
         model=model,
         messages=messages,
     )

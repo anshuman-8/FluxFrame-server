@@ -18,15 +18,15 @@ config = dotenv_values(".env")
 db_client = None
 db: database.Database = None
 db_collection: collection.Collection = None
-
+openai_client = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global db_client, db, db_collection, model, tokenizer, device
+    global db_client, db, db_collection, model, tokenizer, device, openai_client
     db_client = MongoClient(config["ATLAS_URI"])
     db = db_client[config["DB_NAME"]]
     db_collection = db[config["COLLECTION_NAME"]]
-    init_gpt_api(config["OPENAI_API_KEY"])
+    openai_client = init_gpt_api(config["OPENAI_API_KEY"])
     yield
     db_client.close()
 
@@ -55,9 +55,9 @@ class NewPrompt(BaseModel):
     element: Union[str, None] = Field(default=None)
 
 
-def get_prediction(prompt: str, prev_prompt= None, element= None):
+def get_prediction(prompt: str, prev_prompt= None, element= None, openai_client=None):
     # return f"This is a test for the prompt \"{prompt}\". \n Previous prompt: \"{prev_prompt['prompt_text']}\""
-    return generate(prompt, prev_prompt, element)
+    return generate(prompt, prev_prompt, element, openai_client)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -71,7 +71,7 @@ async def root():
 @app.post("/new_project")
 async def new_project(new_project: NewProject):
     logging.info(f"New project: {new_project}")
-    code_generation = get_prediction(new_project.prompt_text, )
+    code_generation = get_prediction(new_project.prompt_text,openai_client=openai_client )
     prompt = Prompt(prompt_text=new_project.prompt_text, generation=code_generation)
     project = Project(name=new_project.project_name, prompts=[prompt])
     project_json = jsonable_encoder(project)
@@ -84,7 +84,7 @@ async def new_project(new_project: NewProject):
 async def new_prompt(new_prompt: NewPrompt):
     prev_prompt = db_collection.find_one({"_id": new_prompt.project_id})["prompts"][-1]
     # prev_prompt = Prompt(**prev_prompt)
-    prompt_generation = get_prediction(new_prompt.prompt_text, prev_prompt, new_prompt.element)
+    prompt_generation = get_prediction(new_prompt.prompt_text, prev_prompt, new_prompt.element, openai_client=openai_client)
     prompt = Prompt(
         prompt_text=new_prompt.prompt_text,
         generation=prompt_generation,

@@ -1,6 +1,7 @@
 from typing import Union, List
 from fastapi import FastAPI, Body
 from fastapi.encoders import jsonable_encoder
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uuid
 from dotenv import dotenv_values
@@ -13,6 +14,8 @@ import logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s)"
 )
+
+
 
 config = dotenv_values(".env")
 db_client = None
@@ -62,6 +65,13 @@ def get_prediction(prompt: str, prev_prompt= None, element= None, openai_client=
 
 app = FastAPI(lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 async def root():

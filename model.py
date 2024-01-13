@@ -5,17 +5,21 @@ import re
 model = "gpt-3.5-turbo"
 sys_init_message = {
     "role": "system",
-    "content": "You are a helpful experienced web developer and designer "
-    "with a deep knowledge of React, TailwindCSS, Web-development "
-    "and Software UI design. Follow all the instructions provided, but can also "
-    "give more features. Do not give multiple answers or repeat things. Make "
-    "beautiful designs using TailwindCSS based on your creativity. Don't provide "
-    "wrong code. Give a complete solution with maximum number of features. "
-    "Give only the JSX code, Do not give any explanation, comments or enclose it "
-    "in code blocks. "
-    "Code practice: Give only the react JSX code, using tailwindCSS in its className. "
-    "Do not give globals.css CSS code,just give tailwindCSS class in className. "
-    "Always check if all the components are correctly written and mapped.",
+    "content": """You are a helpful experienced web developer and designer 
+    with a good knowledge of React, TailwindCSS, Web-development 
+    and Software UI design. Follow all the instructions provided, but can also 
+    give more features. Make beautiful designs using TailwindCSS based on your creativity. 
+    Give only the react function, Do not give any explanation, comments and do not enclose it in code blocks. 
+    Give code only of the Component function. with component return statement.
+    Define react component function as: `const Component = () =>{` ...
+    DO NOT export or return the component.
+    Always name the function/component as `Component`.
+
+    import React from "react";
+    import '../styles/globals.css'
+
+    // Write code form here"""
+    ,
 }
 
 sys_followup_message = {
@@ -49,7 +53,6 @@ def init_gpt_api(key: str):
 
 def generate(prompt, prev_prompt= None, element= None, openai_client=None):
     code = get_code_generation(prompt, prev_prompt, element, openai_client)
-    code = get_html_block(code)
     code = prepare_react_code(code)
 
     return code
@@ -57,7 +60,7 @@ def generate(prompt, prev_prompt= None, element= None, openai_client=None):
 
 def get_code_generation(message: str, prev_prompt= None, element= None, openai_client=None) -> str:
     if prev_prompt is None:
-        messages = [sys_init_message] + [{"role": "user", "content": message}]
+        messages = [sys_init_message] + [{"role": "user", "content": f"Prompt :{message}"}]
     else:
         user_followup_messages = [
             {"role": "user", "content": message},
@@ -78,7 +81,7 @@ def get_code_generation(message: str, prev_prompt= None, element= None, openai_c
     logging.info(f"Received API response: {completion}")
     content = completion.choices[0].message.content
 
-    content = replace_escape_characters(content)
+    # content = replace_escape_characters(content)
     with open("content.js", "w") as f:
         f.write(content)
     return content
@@ -92,43 +95,24 @@ def replace_escape_characters(code):
     return code
 
 
-def get_html_block(filling):
-    html_pattern = r"<html>(.*?)</html>"
-    matches = re.findall(html_pattern, filling, re.DOTALL)
-
-    if matches:
-        return matches[0]
-    else:
-        return filling
-
-
 def prepare_react_code(filling):
-    start_marker = "function Component(){"
-    end_marker = "export default Component;"
+    start_marker = "const"
 
     start_index = filling.find(start_marker)
-    end_index = filling.find(end_marker, start_index)
 
-    print(start_index, end_index)
+    print(start_index)
 
-    if start_index != -1 and end_index != -1 and end_index > start_index:
-        content = filling[start_index + len(start_marker) : end_index].strip()
+    if start_index != -1:
+        content = filling[start_index :].strip()
         filling = content
     else:
         filling = "return() "
 
     code = (
         """
-        import React from "react";
-        import '../styles/globals.css'
-             
-          function Component(){
-          
           """
         + filling
         + """
-          
-          export default Component;
         """
     )
     return code

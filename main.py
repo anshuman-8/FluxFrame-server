@@ -1,5 +1,6 @@
 from typing import Union, List
 from fastapi import FastAPI, Body
+import datetime
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -50,6 +51,7 @@ class Project(BaseModel):
 class NewProject(BaseModel):
     project_name: str = Field(...)
     prompt_text: str = Field(...)
+    date: str = datetime.datetime.now().strftime("%Y-%m-%d")
 
 
 class NewPrompt(BaseModel):

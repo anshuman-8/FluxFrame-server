@@ -5,13 +5,12 @@ import re
 model = "gpt-3.5-turbo"
 sys_init_message = {
     "role": "system",
-    "content": """You are a helpful experienced web developer and designer 
-    with a good knowledge of React, TailwindCSS, Web-development 
+    "content": """You have good knowledge of React, TailwindCSS, Web-development 
     and Software UI design. Follow all the instructions provided, but can also 
     give more features. Make beautiful designs using TailwindCSS based on your creativity. 
+    Design the whole component in a modern design and make it look beautiful.
     Give only the react function, Do not give any explanation, comments and do not enclose it in code blocks. 
-    Give code only of the Component function. with component return statement.
-    Define react component function as: `const Component = () =>{` ...
+    Give code only of the Component function. Define react component function as: `const Component = () =>{` ...
     DO NOT export or return the component.
     Always name the function/component as `Component`.
 
@@ -24,22 +23,9 @@ sys_init_message = {
 
 sys_followup_message = {
     "role": "system",
-    "content": "You are a helpful experienced web developer and designer "
-    "with a deep knowledge of React, TailwindCSS, JavaScript, Web-development "
-    "and Software UI design. You will be given the code for a React file that "
-    "contains a component. You will also be given a prompt that describes a "
-    "modification that a certain part of the component needs. You might also be "
-    "given the code of the part of the component that needs to be modified. "
-    "If the code for the part to be modified is not given, you will have to "
-    "infer the part to be modified from the provided prompt or add the code for "
-    "the part to be modified. You will have to modify the component to satisfy "
-    "the prompt. Return the full code of the modified component and follow the "
-    "below code practice. "
-    "Code practice: Give only the JSX code, using tailwindCSS in its className. "
-    "Do not give globals.css CSS code,just give tailwindCSS class in className. "
-    "You may also write necessary correct javascript by creating functions inside "
-    "<script> tag, use buttons calling function and don't use form tag. Always "
-    "check if all the components are correctly written and mapped.",
+    "content": """ You will be given the code for a React file that 
+    contains a component. Modify just the element code in the whole Component code.
+    Ans return the who modified Component code. Do not modify any other part of the code.""",
 }
 
 history = []
@@ -47,8 +33,8 @@ history = []
 
 def init_gpt_api(key: str):
     client = OpenAI(api_key=key)
-    return client
     logging.info("GPT-3 API initialized")
+    return client
 
 
 def generate(prompt, prev_prompt= None, element= None, openai_client=None):
@@ -97,22 +83,20 @@ def replace_escape_characters(code):
 
 def prepare_react_code(filling):
     start_marker = "const"
+    end_marker = "export"
 
     start_index = filling.find(start_marker)
+    end_index = filling.find(end_marker) 
 
     print(start_index)
 
     if start_index != -1:
-        content = filling[start_index :].strip()
-        filling = content
-    else:
-        filling = "return() "
+        filling = filling[start_index :].strip()
+    if end_index != -1:
+        filling = filling[:end_index].strip()
 
-    code = (
-        """
-          """
-        + filling
-        + """
-        """
-    )
+    with open("filling.js", "w") as f:
+        f.write(filling)
+
+    code =  filling
     return code

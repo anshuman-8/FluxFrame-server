@@ -107,7 +107,7 @@ async def new_prompt(new_prompt: NewPrompt):
         {"_id": new_prompt.project_id}, {"$push": {"prompts": prompt_json}}
     )
 
-    return prompt.model_dump()
+    return prompt_json
 
 
 @app.get("/get_project/{project_id}")

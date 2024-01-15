@@ -23,9 +23,15 @@ sys_init_message = {
 
 sys_followup_message = {
     "role": "system",
-    "content": """ You will be given the code for a React file that 
+    "content": """You will be given the code for a React file that 
     contains a component. Modify just the element code in the whole Component code.
-    Ans return the who modified Component code. Do not modify any other part of the code.""",
+    Return the whole Component code after modification. Do not modify any other part of the code.
+    The response should only contain the modified component code.
+    The component code provided will be delimited by <<Component>> and <</Component>>.
+    The element code to modify will be delimited by <<Element>> and <</Element>>.
+    Return the whole modified Component code. Do not modify any other part of the code.
+    The response should only contain the modified component code without any delimiters.
+    The returned code should be a valid React component code and should not contain any syntax errors.""",
 }
 
 history = []
@@ -41,6 +47,9 @@ def generate(prompt, prev_prompt= None, element= None, openai_client=None):
     code = get_code_generation(prompt, prev_prompt, element, openai_client)
     code = prepare_react_code(code)
 
+    with open("content.js", "w") as f:
+        f.write(code)
+
     return code
 
 
@@ -49,12 +58,16 @@ def get_code_generation(message: str, prev_prompt= None, element= None, openai_c
         messages = [sys_init_message] + [{"role": "user", "content": f"Prompt :{message}"}]
     else:
         user_followup_messages = [
-            {"role": "user", "content": message},
-            {"role": "user", "content": f"Code:\n{prev_prompt.generation}"},
+            {"role": "user", "content": f"Modification to make: {message}"},
+            {"role": "user", "content": f"<<Component>>\n{prev_prompt['generation']}\n<</Component>>"},
         ]
-        if element is not None:
+        if element is not None and element != "":
             user_followup_messages.append(
-                {"role": "user", "content": f"Element to modify:\n{element}"}
+                {"role": "user", "content": f"<<Element>>\n{element}\n<</Element>>"}
+            )
+        else:
+            user_followup_messages.append(
+                {"role": "user", "content": f"<<Element>>\n{prev_prompt['generation']}\n<</Element>>"}
             )
         messages = [sys_followup_message] + user_followup_messages
     # messages = [sys_init_message] + [{"role": "user", "content": message}]
@@ -68,8 +81,6 @@ def get_code_generation(message: str, prev_prompt= None, element= None, openai_c
     content = completion.choices[0].message.content
 
     # content = replace_escape_characters(content)
-    with open("content.js", "w") as f:
-        f.write(content)
     return content
 
 
@@ -85,13 +96,18 @@ def prepare_react_code(filling):
     start_marker = "const"
     end_marker = "export"
 
+    delimiters = ["<<Component>>", "<</Component>>", "<<Element>>", "<</Element>>"]
+    for delimiter in delimiters:
+        filling = filling.replace(delimiter, "")
+
     start_index = filling.find(start_marker)
-    end_index = filling.find(end_marker) 
 
     print(start_index)
 
     if start_index != -1:
         filling = filling[start_index :].strip()
+
+    end_index = filling.find(end_marker) 
     if end_index != -1:
         filling = filling[:end_index].strip()
 

@@ -13,7 +13,7 @@ from model import generate, init_gpt_api
 import logging
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s)"
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s)"
 )
 
 
